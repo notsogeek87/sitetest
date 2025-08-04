@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Journal de Souvenirs</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 2rem auto;
+      background: #f9fafb;
+      padding: 1rem;
+    }
+    input, textarea, button {
+      width: 100%;
+      margin: 0.5rem 0;
+      padding: 0.7rem;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #1976d2;
+      border: none;
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #1565c0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #2196f3;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>Journal de Souvenirs</h1>
+
+  <form id="souvenirForm">
+    <input type="text" id="titre" placeholder="Titre du souvenir" required />
+    <textarea id="description" placeholder="Décris ce moment..." required></textarea>
+    <input type="date" id="date" />
+    <button type="submit">Ajouter le souvenir</button>
+  </form>
+
+  <table id="souvenirsTable">
+    <thead>
+      <tr>
+        <th>Titre</th>
+        <th>Description</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCSYQ7EIbq_q5VA1FySKQgtru5bEh5_gvc",
+      authDomain: "journal-souvenirs.firebaseapp.com",
+      databaseURL: "https://journal-souvenirs-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "journal-souvenirs",
+      storageBucket: "journal-souvenirs.firebasestorage.app",
+      messagingSenderId: "276780554819",
+      appId: "1:276780554819:web:21dabeea04da8bfad3d2f6",
+      measurementId: "G-3TE395YTE8"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const userId = "anonyme";
+
+    document.getElementById('souvenirForm').addEventListener('submit', e => {
+      e.preventDefault();
+
+      const titre = document.getElementById('titre').value;
+      const description = document.getElementById('description').value;
+      const date = document.getElementById('date').value || new Date().toISOString().split('T')[0];
+
+      const ref = db.ref('souvenirs/' + userId).push();
+      ref.set({ titre, description, date });
+
+      e.target.reset();
+    });
+
+    function loadSouvenirs() {
+      const tbody = document.querySelector('#souvenirsTable tbody');
+      db.ref('souvenirs/' + userId).on('value', snapshot => {
+        tbody.innerHTML = '';
+        snapshot.forEach(child => {
+          const data = child.val();
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${data.titre}</td>
+            <td>${data.description}</td>
+            <td>${data.date}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    loadSouvenirs();
+  </script>
+</body>
+</html>
