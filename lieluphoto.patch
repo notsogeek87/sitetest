@@ -1,0 +1,387 @@
+From ea32e86e35c56cd692f4059e93567a6c0ba83aa6 Mon Sep 17 00:00:00 2001
+From: David <davidg.c.d@proton.me>
+Date: Sat, 17 Oct 2026 12:02:46 +0000
+Subject: [PATCH 1/3] Bokeh toggle chip in viewfinder
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EuJi1jnjZwix3g9uGqK3T1
+---
+ .../hinnka/mycamera/ui/camera/CameraScreen.kt | 38 +++++++++++++++----
+ app/src/main/res/values-fr/strings.xml        |  3 ++
+ app/src/main/res/values/strings.xml           |  2 +
+ 3 files changed, 35 insertions(+), 8 deletions(-)
+
+diff --git a/app/src/main/java/com/hinnka/mycamera/ui/camera/CameraScreen.kt b/app/src/main/java/com/hinnka/mycamera/ui/camera/CameraScreen.kt
+index 3e08a30..9311ed3 100644
+--- a/app/src/main/java/com/hinnka/mycamera/ui/camera/CameraScreen.kt
++++ b/app/src/main/java/com/hinnka/mycamera/ui/camera/CameraScreen.kt
+@@ -10,6 +10,7 @@ import android.os.Environment
+ import android.os.SystemClock
+ import android.provider.Settings
+ import android.view.WindowManager
++import android.widget.Toast
+ import androidx.activity.compose.rememberLauncherForActivityResult
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.compose.animation.*
+@@ -71,6 +72,7 @@ import com.hinnka.mycamera.camera.FocusPointSource
+ import com.hinnka.mycamera.camera.PhotoCaptureProgress
+ import com.hinnka.mycamera.data.CaptureButtonStyle
+ import com.hinnka.mycamera.data.DevelopAnimationStyle
++import com.hinnka.mycamera.ml.DepthModelManager
+ import com.hinnka.mycamera.model.CameraPreset
+ import com.hinnka.mycamera.model.ColorRecipeParams
+ import com.hinnka.mycamera.model.LutSelectorMode
+@@ -1325,8 +1327,7 @@ fun CameraScreen(
+                     val showLivePhotoIndicator =
+                         state.captureMode == CaptureMode.PHOTO && useLivePhoto
+                     val showVirtualApertureIndicator =
+-                        state.captureMode != CaptureMode.VIDEO &&
+-                            state.isVirtualApertureEnabled
++                        state.captureMode != CaptureMode.VIDEO
+                     if (showLivePhotoIndicator || showVirtualApertureIndicator) {
+                         Column(
+                             modifier = Modifier
+@@ -1355,14 +1356,35 @@ fun CameraScreen(
+                             }
+                             if (showVirtualApertureIndicator) {
+                                 Surface(
+-                                    color = Color.Black.copy(alpha = 0.2f),
+-                                    shape = RoundedCornerShape(8.dp)
++                                    color = Color.Black.copy(
++                                        alpha = if (state.isVirtualApertureEnabled) 0.2f else 0.1f
++                                    ),
++                                    shape = RoundedCornerShape(8.dp),
++                                    modifier = Modifier
++                                        .clip(RoundedCornerShape(8.dp))
++                                        .clickable {
++                                            if (state.isVirtualApertureEnabled) {
++                                                viewModel.setVirtualApertureAuto(false)
++                                            } else if (DepthModelManager.isInstalled(context)) {
++                                                viewModel.setVirtualApertureAuto(true)
++                                            } else {
++                                                Toast.makeText(
++                                                    context,
++                                                    R.string.virtual_aperture_toggle_needs_model,
++                                                    Toast.LENGTH_LONG
++                                                ).show()
++                                            }
++                                        }
+                                 ) {
+                                     Text(
+-                                        text = stringResource(
+-                                            R.string.virtual_aperture_viewfinder_hint,
+-                                            formatVirtualApertureFStop(state.virtualAperture)
+-                                        ),
++                                        text = if (state.isVirtualApertureEnabled) {
++                                            stringResource(
++                                                R.string.virtual_aperture_viewfinder_hint,
++                                                formatVirtualApertureFStop(state.virtualAperture)
++                                            )
++                                        } else {
++                                            stringResource(R.string.virtual_aperture_viewfinder_off)
++                                        },
+                                         color = Color.White,
+                                         fontSize = 9.sp,
+                                         fontWeight = FontWeight.Medium,
+diff --git a/app/src/main/res/values-fr/strings.xml b/app/src/main/res/values-fr/strings.xml
+index 6707ae0..eacacd4 100644
+--- a/app/src/main/res/values-fr/strings.xml
++++ b/app/src/main/res/values-fr/strings.xml
+@@ -357,4 +357,7 @@
+     <string name="settings_raw_leica_color_matrix_m9">M9</string>
+     <string name="camera_focus_point_label">Mise au point</string>
+     <string name="camera_metering_point_label">Mesure</string>
++    <string name="virtual_aperture_viewfinder_hint">f/%1$s</string>
++    <string name="virtual_aperture_viewfinder_off">Bokeh off</string>
++    <string name="virtual_aperture_toggle_needs_model">Installez d\'abord le modèle de profondeur : Réglages → Ouverture virtuelle par défaut.</string>
+ </resources>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index fb579cc..6d9ef1b 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1114,6 +1114,8 @@
+     <string name="phantom">Phantom</string>
+     <string name="virtual_aperture">Virtual Aperture</string>
+     <string name="virtual_aperture_viewfinder_hint">f/%1$s</string>
++    <string name="virtual_aperture_viewfinder_off">Bokeh off</string>
++    <string name="virtual_aperture_toggle_needs_model">Install the depth model first: Settings → Default Virtual Aperture.</string>
+     <string name="settings_default_virtual_aperture">Default Virtual Aperture</string>
+     <string name="settings_default_virtual_aperture_description">Automatically enable virtual aperture with the selected f-stop value for new photos.</string>
+     <string name="virtual_aperture_depth_model_description">Uses the installed compatible depth model. Download the default model or import another compatible TFLite model on first use.</string>
+-- 
+2.43.0
+
+
+From 986bbb5604b085cd507020e7747c39b654c87b99 Mon Sep 17 00:00:00 2001
+From: David <davidg.c.d@proton.me>
+Date: Sat, 17 Oct 2026 12:02:58 +0000
+Subject: [PATCH 2/3] Rename app to LieluPhoto, applicationId eu.lielu.photo
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EuJi1jnjZwix3g9uGqK3T1
+---
+ app/build.gradle.kts                          | 2 +-
+ app/src/main/res/values-b+zh+Hant/strings.xml | 2 +-
+ app/src/main/res/values-de/strings.xml        | 2 +-
+ app/src/main/res/values-fr/strings.xml        | 2 +-
+ app/src/main/res/values-in/strings.xml        | 2 +-
+ app/src/main/res/values-ja/strings.xml        | 2 +-
+ app/src/main/res/values-ko/strings.xml        | 2 +-
+ app/src/main/res/values-pt-rBR/strings.xml    | 2 +-
+ app/src/main/res/values-th/strings.xml        | 2 +-
+ app/src/main/res/values-zh-rCN/strings.xml    | 2 +-
+ app/src/main/res/values-zh-rHK/strings.xml    | 2 +-
+ app/src/main/res/values-zh-rTW/strings.xml    | 2 +-
+ app/src/main/res/values/strings.xml           | 2 +-
+ 13 files changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 08ebf4a..b8a52fa 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -23,7 +23,7 @@ android {
+     ndkVersion = "29.0.14206865"
+ 
+     defaultConfig {
+-        applicationId = "com.hinnka.mycamera"
++        applicationId = "eu.lielu.photo"
+         minSdk = 30
+         targetSdk = 36
+         versionCode = 162
+diff --git a/app/src/main/res/values-b+zh+Hant/strings.xml b/app/src/main/res/values-b+zh+Hant/strings.xml
+index 0a6fbbe..506a642 100644
+--- a/app/src/main/res/values-b+zh+Hant/strings.xml
++++ b/app/src/main/res/values-b+zh+Hant/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">光子相機</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">切換攝像頭</string>
+diff --git a/app/src/main/res/values-de/strings.xml b/app/src/main/res/values-de/strings.xml
+index b78f272..8f53adc 100644
+--- a/app/src/main/res/values-de/strings.xml
++++ b/app/src/main/res/values-de/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">Kamera wechseln</string>
+diff --git a/app/src/main/res/values-fr/strings.xml b/app/src/main/res/values-fr/strings.xml
+index eacacd4..11812a0 100644
+--- a/app/src/main/res/values-fr/strings.xml
++++ b/app/src/main/res/values-fr/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">Changer de caméra</string>
+diff --git a/app/src/main/res/values-in/strings.xml b/app/src/main/res/values-in/strings.xml
+index 9a1ddda..b643c5a 100644
+--- a/app/src/main/res/values-in/strings.xml
++++ b/app/src/main/res/values-in/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">Ganti Kamera</string>
+diff --git a/app/src/main/res/values-ja/strings.xml b/app/src/main/res/values-ja/strings.xml
+index db4facb..4b3f01a 100644
+--- a/app/src/main/res/values-ja/strings.xml
++++ b/app/src/main/res/values-ja/strings.xml
+@@ -1,6 +1,6 @@
+ <resources>
+     <string name="camera_video_fps_unavailable">カメラ側から有効なフレームレート範囲が取得できないため、録画できません。</string>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">カメラを切り替え</string>
+diff --git a/app/src/main/res/values-ko/strings.xml b/app/src/main/res/values-ko/strings.xml
+index 0f40ba9..bc8ad16 100644
+--- a/app/src/main/res/values-ko/strings.xml
++++ b/app/src/main/res/values-ko/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">카메라 전환</string>
+diff --git a/app/src/main/res/values-pt-rBR/strings.xml b/app/src/main/res/values-pt-rBR/strings.xml
+index 01f9866..46154d0 100644
+--- a/app/src/main/res/values-pt-rBR/strings.xml
++++ b/app/src/main/res/values-pt-rBR/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+     
+     <!-- Camera Controls -->
+     <string name="switch_camera">Alternar Câmera</string>
+diff --git a/app/src/main/res/values-th/strings.xml b/app/src/main/res/values-th/strings.xml
+index 3a2c6d5..fb225d6 100644
+--- a/app/src/main/res/values-th/strings.xml
++++ b/app/src/main/res/values-th/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">สลับกล้อง</string>
+diff --git a/app/src/main/res/values-zh-rCN/strings.xml b/app/src/main/res/values-zh-rCN/strings.xml
+index b4cdfbf..1c20ea3 100644
+--- a/app/src/main/res/values-zh-rCN/strings.xml
++++ b/app/src/main/res/values-zh-rCN/strings.xml
+@@ -1,6 +1,6 @@
+ <resources>
+     <string name="camera_video_fps_unavailable">相机未提供有效的帧率范围，暂时无法录像。</string>
+-    <string name="app_name">光子相机</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">切换摄像头</string>
+diff --git a/app/src/main/res/values-zh-rHK/strings.xml b/app/src/main/res/values-zh-rHK/strings.xml
+index 41c9906..43fd82b 100644
+--- a/app/src/main/res/values-zh-rHK/strings.xml
++++ b/app/src/main/res/values-zh-rHK/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">光子相機</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">切換攝像頭</string>
+diff --git a/app/src/main/res/values-zh-rTW/strings.xml b/app/src/main/res/values-zh-rTW/strings.xml
+index 2f0fd7c..edc3a2d 100644
+--- a/app/src/main/res/values-zh-rTW/strings.xml
++++ b/app/src/main/res/values-zh-rTW/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">光子相機</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">切換攝像頭</string>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 6d9ef1b..5cb490e 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,6 +1,6 @@
+ <resources>
+     <string name="camera_video_fps_unavailable">Recording is unavailable because the camera did not provide valid frame rate ranges.</string>
+-    <string name="app_name">Photon Camera</string>
++    <string name="app_name">LieluPhoto</string>
+ 
+     <!-- Camera Controls -->
+     <string name="switch_camera">Switch Camera</string>
+-- 
+2.43.0
+
+
+From cbbcfa6fcce9e0d37614b36dca808ec150928544 Mon Sep 17 00:00:00 2001
+From: David <davidg.c.d@proton.me>
+Date: Sat, 17 Oct 2026 12:03:08 +0000
+Subject: [PATCH 3/3] Privacy: remove Bugly, disable update check
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EuJi1jnjZwix3g9uGqK3T1
+---
+ app/build.gradle.kts                                 |  6 ------
+ .../com/hinnka/mycamera/update/AppUpdateManager.kt   |  3 +++
+ .../java/com/hinnka/mycamera/utils/BuglyHelper.kt    | 12 ------------
+ 3 files changed, 3 insertions(+), 18 deletions(-)
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index b8a52fa..9553b8b 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -210,12 +210,6 @@ dependencies {
+     // MediaPipe Face Detector for human eye autofocus
+     implementation("com.google.mediapipe:tasks-vision:1.0.0")
+ 
+-    // Bugly for default flavor
+-    "defaultImplementation"(libs.bugly.crashreport)
+-    "samsungImplementation"(libs.bugly.crashreport)
+-    "meituImplementation"(libs.bugly.crashreport)
+-    "devImplementation"(libs.bugly.crashreport)
+-
+     // Billing for google flavor
+     "googleImplementation"(libs.google.billing)
+     "googleImplementation"(libs.google.billing.ktx)
+diff --git a/app/src/default/java/com/hinnka/mycamera/update/AppUpdateManager.kt b/app/src/default/java/com/hinnka/mycamera/update/AppUpdateManager.kt
+index eb395c4..79508f0 100644
+--- a/app/src/default/java/com/hinnka/mycamera/update/AppUpdateManager.kt
++++ b/app/src/default/java/com/hinnka/mycamera/update/AppUpdateManager.kt
+@@ -38,6 +38,7 @@ data class AppUpdateRelease(
+ 
+ object AppUpdateManager {
+     private const val TAG = "AppUpdateManager"
++    private const val UPDATES_ENABLED = false
+     private const val VERSION_CHECK_URL = "https://camera-api.hinnka.me/api/version/check"
+     private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+     private const val APK_MAGIC_0 = 'P'.code.toByte()
+@@ -61,6 +62,7 @@ object AppUpdateManager {
+         flavor: String = BuildConfig.FLAVOR
+     ): AppUpdateRelease? =
+         withContext(Dispatchers.IO) {
++            if (!UPDATES_ENABLED) return@withContext null
+             val encodedVersion = URLEncoder.encode(currentVersion, "UTF-8")
+             val encodedFlavor = URLEncoder.encode(flavor, "UTF-8")
+             val request = Request.Builder()
+@@ -110,6 +112,7 @@ object AppUpdateManager {
+         getOrStartDownload(context.applicationContext, release).await()
+ 
+     fun startSilentUpdate(context: Context) {
++        if (!UPDATES_ENABLED) return
+         val appContext = context.applicationContext
+         synchronized(downloadLock) {
+             if (activeSilentCheck?.isActive == true) return
+diff --git a/app/src/default/java/com/hinnka/mycamera/utils/BuglyHelper.kt b/app/src/default/java/com/hinnka/mycamera/utils/BuglyHelper.kt
+index 0b9ce91..601c8b5 100644
+--- a/app/src/default/java/com/hinnka/mycamera/utils/BuglyHelper.kt
++++ b/app/src/default/java/com/hinnka/mycamera/utils/BuglyHelper.kt
+@@ -1,32 +1,20 @@
+ package com.hinnka.mycamera.utils
+ 
+ import android.content.Context
+-import android.provider.Settings
+-import com.tencent.bugly.crashreport.BuglyLog
+-import com.tencent.bugly.crashreport.CrashReport
+ 
+ object BuglyHelper {
+     fun init(context: Context) {
+-        val strategy = CrashReport.UserStrategy(context).apply {
+-            deviceID = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+-            deviceModel = DeviceUtil.model
+-        }
+-        CrashReport.initCrashReport(context.applicationContext, "9966e9cd35", false, strategy)
+     }
+ 
+     fun setUserScene(context: Context, scene: Int) {
+-        CrashReport.setUserSceneTag(context, scene)
+     }
+ 
+     fun putUserData(context: Context, key: String, value: String) {
+-        CrashReport.putUserData(context, key, value)
+     }
+ 
+     fun log(tag: String, msg: String, throwable: Throwable? = null) {
+-        BuglyLog.e(tag, msg, throwable)
+     }
+ 
+     fun error(throwable: Throwable) {
+-        CrashReport.postCatchedException(throwable)
+     }
+ }
+-- 
+2.43.0
+
