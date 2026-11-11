@@ -1,0 +1,117 @@
+# Audit ponctuel Trivy de tous les dépôts publics de notsogeek87 — à supprimer après.
+# Hébergé ici (sitetest n'a aucun autre workflow : pas de build déclenché ailleurs).
+# Sécurité (CVE-2026-33634) : ni trivy-action ni setup-trivy ; binaire v0.72.0 des
+# releases GitHub, vérifié par SHA-256 ET attestation de provenance. Aucun secret.
+name: audit-trivy-tous
+on:
+  push:
+    branches: ["security/audit-tous-2026-11-11"]
+    paths: [".github/workflows/audit-trivy-tous.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - { repo: trusti, ref: main, gradle: android, node: "true", docker: "" }
+          - { repo: trusti, ref: hyperfluid, gradle: android, node: "true", docker: "Dockerfile" }
+          - { repo: allcommand, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: lieluwish, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: trusti-score, ref: main, gradle: "", node: "", docker: "" }
+          - { repo: lieluSync, ref: main, gradle: "", node: "", docker: "" }
+          - { repo: LieluApp, ref: main, gradle: "", node: "", docker: "" }
+          - { repo: kigardeki, ref: main, gradle: "", node: "", docker: "" }
+          - { repo: backlog, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: bubble-android_transcribe_app, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: rangele, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: Vizuzik, ref: main, gradle: android, node: "true", docker: "" }
+          - { repo: messous, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: lielugit-updater, ref: main, gradle: ".", node: "", docker: "" }
+          - { repo: monNhuitNe, ref: main, gradle: android, node: "true", docker: "server/Dockerfile" }
+          - { repo: extract-repack, ref: main, gradle: ".", node: "", docker: "" }
+    name: ${{ matrix.repo }}@${{ matrix.ref }}
+    env:
+      TRIVY_VERSION: "0.72.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: notsogeek87/${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+          submodules: false
+
+      - if: matrix.node == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - if: matrix.node == 'true'
+        name: npm (sans scripts) + cap sync
+        continue-on-error: true
+        run: |
+          npm ci --ignore-scripts
+          (npm run cap:prepare || npm run build) >/dev/null 2>&1 || true
+          npx cap sync android || true
+
+      - if: matrix.gradle != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - if: matrix.gradle != ''
+        name: Lockfile Gradle (variantes release)
+        continue-on-error: true
+        working-directory: ${{ matrix.gradle }}
+        run: |
+          cat > "$RUNNER_TEMP/lock.init.gradle" <<'EOF'
+          allprojects {
+            dependencyLocking { lockAllConfigurations() }
+            tasks.register("resolveReleaseDeps") {
+              doLast {
+                configurations.findAll { it.canBeResolved && it.name ==~ /(?i).*releaseRuntimeClasspath/ }.each {
+                  try { it.resolve() } catch (e) { println("NON RÉSOLU ${project.path}:${it.name} ${e.message?.take(120)}") }
+                }
+              }
+            }
+          }
+          EOF
+          chmod +x gradlew
+          ./gradlew --no-daemon -q --no-configuration-cache --continue --init-script "$RUNNER_TEMP/lock.init.gradle" resolveReleaseDeps --write-locks || true
+          echo "LOCKFILES:"; find . -name gradle.lockfile -not -path '*/node_modules/*' -exec wc -l {} \;
+
+      - name: Installer Trivy (vérifié)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tgz="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "$base/$tgz"; curl -fsSLO "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "trivy_${TRIVY_VERSION}_checksums.txt"
+          gh attestation verify "$tgz" --repo aquasecurity/trivy
+          tar xzf "$tgz" trivy
+
+      - name: Scan dépôt
+        run: |
+          T="$RUNNER_TEMP/trivy"
+          $T fs --scanners vuln --skip-version-check --include-dev-deps --severity CRITICAL,HIGH,MEDIUM,LOW --format json --output trivy.json .
+          echo "=== RÉSUMÉ ${{ matrix.repo }}@${{ matrix.ref }}"
+          jq -r '.Results[]? | "CIBLE\t\(.Type)\t\(.Target)\t\(.Vulnerabilities|length? // 0)"' trivy.json
+          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]? | ["VULN",$t,.PkgName,.InstalledVersion,.Severity,.VulnerabilityID,(.FixedVersion//"-"),(.Title//"")[0:90]] | @tsv' trivy.json
+
+      - if: matrix.docker != ''
+        name: Build + scan image
+        continue-on-error: true
+        run: |
+          ctx=$(dirname "${{ matrix.docker }}")
+          docker build -q -f "${{ matrix.docker }}" -t audit/img:local "$ctx" >/dev/null
+          "$RUNNER_TEMP/trivy" image --scanners vuln --skip-version-check --severity CRITICAL,HIGH,MEDIUM --format json --output img.json audit/img:local
+          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]? | ["IMG",$t,.PkgName,.InstalledVersion,.Severity,.VulnerabilityID,(.FixedVersion//"-"),(.Title//"")[0:90]] | @tsv' img.json
