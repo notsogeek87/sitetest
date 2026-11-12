@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       max-parallel: 8
       matrix:
-        include: [{"repo": "trusti", "ref": "main", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}, {"repo": "swipernews", "ref": "main", "gradle": "android", "cap": "npm run cap:prepare", "docker": "", "pubvariants": ""}, {"repo": "vizuzik", "ref": "main", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}, {"repo": "backlog", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "bubble-android_transcribe_app", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}]
+        include: [{"repo": "trusti", "ref": "security/correctifs-2026-11-12", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}, {"repo": "trusti-score", "ref": "security/correctifs-2026-11-12", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lieluwish", "ref": "security/correctifs-2026-11-12", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "kigardeki", "ref": "security/correctifs-2026-11-12", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "swipernews", "ref": "security/correctifs-2026-11-12", "gradle": "android", "cap": "npm run cap:prepare", "docker": "", "pubvariants": ""}, {"repo": "vizuzik", "ref": "security/correctifs-2026-11-12", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}]
     env:
       TRIVY_VERSION: "0.76.2"
       REPO: ${{ matrix.repo }}@${{ matrix.ref }}
