@@ -27,6 +27,13 @@ allprojects { p ->
                     println "RÉSOLU ${p.path}:${c.name} (${rc.resolvedArtifacts.size()} artefacts)"
                 } catch (Throwable e) {
                     println "NON RÉSOLU ${p.path}:${c.name} : ${(e.message ?: e.toString()).readLines().first()}"
+                    def seenMsg = [] as Set
+                    def t = e
+                    while (t != null) {
+                        (t.message ?: "").readLines().take(6).each { l -> if (seenMsg.add(l)) println "   cause: ${l}" }
+                        if (t.hasProperty("causes") && t.causes) { t.causes.each { cc -> (cc.message ?: "").readLines().take(4).each { l -> if (seenMsg.add(l)) println "   cause: ${l}" } } }
+                        t = t.cause == t ? null : t.cause
+                    }
                 }
             }
         }
