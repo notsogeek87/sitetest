@@ -1,0 +1,115 @@
+# Audit ponctuel des dépendances (Trivy 0.76.2). Lecture seule : aucun secret, aucune publication.
+# À supprimer avec la branche une fois l'audit terminé.
+name: Audit Trivy — tous les dépôts publics
+on:
+  push:
+    branches: ["security/audit-tous-2026-11-12"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: audit-trivy-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  scan:
+    name: ${{ matrix.repo }}@${{ matrix.ref }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include: [{"repo": "trusti", "ref": "main", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}, {"repo": "trusti", "ref": "hyperfluid", "gradle": "", "cap": "", "docker": "Dockerfile:.", "pubvariants": ""}, {"repo": "swipernews", "ref": "main", "gradle": "android", "cap": "npm run cap:prepare", "docker": "", "pubvariants": ""}, {"repo": "vizuzik", "ref": "main", "gradle": "android", "cap": "npm run build", "docker": "", "pubvariants": ""}, {"repo": "monnhuitne", "ref": "main", "gradle": "android", "cap": "", "docker": "server/Dockerfile:.", "pubvariants": ""}, {"repo": "kigardeki", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lielusync", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lieluwish", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "trusti-score", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "backlog", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lielutodo", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lieluphoto", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lielukeep", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "rangele", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "messous", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "extract-repack", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lielugit-updater", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "allcommand", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "bubble-android_transcribe_app", "ref": "main", "gradle": ".", "cap": "", "docker": "", "pubvariants": ""}, {"repo": "lielufind", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": "pubspec-foss.lock pubspec-gms.lock"}, {"repo": "lieluapp", "ref": "main", "gradle": "", "cap": "", "docker": "", "pubvariants": ""}]
+    env:
+      TRIVY_VERSION: "0.76.2"
+      REPO: ${{ matrix.repo }}@${{ matrix.ref }}
+      GRADLE_DIR: ${{ matrix.gradle }}
+      CAP_PREP: ${{ matrix.cap }}
+      DOCKER_SPEC: ${{ matrix.docker }}
+      PUB_VARIANTS: ${{ matrix.pubvariants }}
+    steps:
+      - name: Checkout de la cible (sans identifiants)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: notsogeek87/${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          path: src
+          persist-credentials: false
+      - name: Checkout des outils d'audit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: tools
+          persist-credentials: false
+      - name: Télécharger et vérifier Trivy (sha256 + attestation GitHub)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-dl" && cd "$RUNNER_TEMP/trivy-dl"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tgz="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "$base/$tgz"
+          curl -fsSLO "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $tgz\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          gh attestation verify "$tgz" --repo aquasecurity/trivy
+          tar -xzf "$tgz" trivy
+          ./trivy --version
+          echo "$RUNNER_TEMP/trivy-dl" >> "$GITHUB_PATH"
+      - name: Node (Capacitor)
+        if: matrix.cap != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Préparer Capacitor (npm ci --ignore-scripts, build web, cap sync)
+        if: matrix.cap != ''
+        working-directory: src
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          $CAP_PREP || echo "ÉCHEC préparation web : $CAP_PREP"
+          npx cap sync android || echo "ÉCHEC npx cap sync android"
+      - name: Java 17 et 21
+        if: matrix.gradle != ''
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - name: Générer les gradle.lockfile (release)
+        if: matrix.gradle != ''
+        working-directory: src/${{ matrix.gradle }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --init-script "$GITHUB_WORKSPACE/tools/.github/audit/init.gradle" auditResolve --write-locks --continue \
+            --no-configuration-cache --console=plain \
+            -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 > "$RUNNER_TEMP/gradle.log" 2>&1 \
+            || echo "GRADLE en échec (code $?)"
+          grep -E "RÉSOLU|What went wrong" -A2 "$RUNNER_TEMP/gradle.log" | grep -v '^--$' | head -60 || true
+          grep -q "RÉSOLU" "$RUNNER_TEMP/gradle.log" || tail -40 "$RUNNER_TEMP/gradle.log"
+          n=0
+          while IFS= read -r f; do echo "LOCKFILE $f : $(wc -l < "$f") lignes"; n=$((n+1)); done < <(find . -name gradle.lockfile -not -path '*/node_modules/*')
+          echo "LOCKFILES $n"
+      - name: Scan Trivy du dépôt (dépendances prod + dev)
+        run: |
+          set -o pipefail
+          trivy fs --scanners vuln --include-dev-deps --skip-dirs '**/node_modules' \
+            --cache-dir "$RUNNER_TEMP/trivy-cache" --format json --output "$RUNNER_TEMP/fs.json" src
+          python3 -I "tools/.github/audit/tri.py" "$REPO" "$RUNNER_TEMP/fs.json" src ""
+      - name: Variantes pubspec-*.lock
+        if: matrix.pubvariants != ''
+        run: |
+          for v in $PUB_VARIANTS; do
+            d="$RUNNER_TEMP/var-$v"; mkdir -p "$d"; cp "src/$v" "$d/pubspec.lock"
+            trivy fs --scanners vuln --include-dev-deps --cache-dir "$RUNNER_TEMP/trivy-cache" \
+              --format json --output "$RUNNER_TEMP/var.json" "$d"
+            python3 -I "tools/.github/audit/tri.py" "$REPO" "$RUNNER_TEMP/var.json" "$d" "variante-$v"
+          done
+      - name: Image Docker
+        if: matrix.docker != ''
+        run: |
+          df="${DOCKER_SPEC%%:*}"; ctx="${DOCKER_SPEC#*:}"
+          docker build -f "src/$df" -t audit-img:local "src/$ctx" > "$RUNNER_TEMP/docker.log" 2>&1 \
+            || { echo "ÉCHEC docker build"; tail -40 "$RUNNER_TEMP/docker.log"; exit 0; }
+          trivy image --scanners vuln --cache-dir "$RUNNER_TEMP/trivy-cache" \
+            --format json --output "$RUNNER_TEMP/img.json" audit-img:local
+          python3 -I "tools/.github/audit/tri.py" "$REPO" "$RUNNER_TEMP/img.json" src "image-$df"

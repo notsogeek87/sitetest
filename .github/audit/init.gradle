@@ -1,0 +1,34 @@
+// Script d'initialisation d'audit : verrouille toutes les configurations et résout chaque
+// configuration *releaseRuntimeClasspath (ce qui part dans l'APK/AAR), sans faire échouer le build.
+allprojects { p ->
+    p.dependencyLocking { lockAllConfigurations() }
+    p.tasks.register("auditResolve") {
+        doLast {
+            def dir = new File(System.getenv("RUNNER_TEMP") ?: "/tmp", "chains")
+            dir.mkdirs()
+            def out = new File(dir, "g" + p.path.replace(":", "_") + ".tsv")
+            p.configurations.findAll { it.canBeResolved && it.name.toLowerCase().endsWith("releaseruntimeclasspath") }.each { c ->
+                try {
+                    def rc = c.resolvedConfiguration
+                    rc.rethrowFailure()
+                    def sb = new StringBuilder()
+                    rc.firstLevelModuleDependencies.each { top ->
+                        def seen = [] as Set
+                        def walk
+                        walk = { n ->
+                            if (seen.add(n.module.id.toString())) {
+                                sb.append("${p.path}\t${top.moduleGroup}:${top.moduleName}\t${n.moduleGroup}:${n.moduleName}\n")
+                                n.children.each { walk(it) }
+                            }
+                        }
+                        walk(top)
+                    }
+                    out << sb.toString()
+                    println "RÉSOLU ${p.path}:${c.name} (${rc.resolvedArtifacts.size()} artefacts)"
+                } catch (Throwable e) {
+                    println "NON RÉSOLU ${p.path}:${c.name} : ${(e.message ?: e.toString()).readLines().first()}"
+                }
+            }
+        }
+    }
+}
